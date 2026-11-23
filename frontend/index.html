@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StockSense — Trend Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #090b0f;
+    --panel: #10141b;
+    --panel-2: #151a22;
+    --line: #232a35;
+    --text: #e7ecf3;
+    --muted: #7c8798;
+    --bull: #35d68f;
+    --bear: #ff5c6a;
+    --neutral: #f2b544;
+    --accent: #4fa3ff;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: radial-gradient(1200px 600px at 80% -10%, #101828 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+  .mono{ font-family: 'IBM Plex Mono', monospace; }
+
+  /* ---------- ticker tape ---------- */
+  .ticker-wrap{
+    border-bottom: 1px solid var(--line);
+    background: #0c0f15;
+    overflow: hidden;
+    white-space: nowrap;
+    padding: 10px 0;
+  }
+  .ticker{
+    display: inline-block;
+    padding-left: 100%;
+    animation: scroll-left 32s linear infinite;
+  }
+  .ticker-wrap:hover .ticker{ animation-play-state: paused; }
+  @keyframes scroll-left{
+    0%{ transform: translateX(0); }
+    100%{ transform: translateX(-100%); }
+  }
+  .tick{
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-right: 40px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+  }
+  .tick .sym{ color: var(--text); font-weight: 600; letter-spacing: 0.02em; }
+  .tick .px{ color: var(--muted); }
+
+  /* ---------- header ---------- */
+  header{
+    padding: 28px clamp(20px, 4vw, 56px) 8px;
+  }
+  .brand{
+    display:flex; align-items:baseline; gap: 14px;
+  }
+  .brand .mark{
+    font-family:'IBM Plex Mono', monospace;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+  }
+  .brand .mark .dot{ color: var(--bull); }
+  .brand .tag{ color: var(--muted); font-size: 13px; }
+  header p.sub{
+    color: var(--muted);
+    margin: 6px 0 0;
+    max-width: 640px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ---------- layout ---------- */
+  .layout{
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    padding: 20px clamp(20px, 4vw, 56px) 56px;
+  }
+  @media (max-width: 860px){
+    .layout{ grid-template-columns: 1fr; }
+  }
+
+  .panel{
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  /* ---------- stock list ---------- */
+  .stock-list{ padding: 6px; max-height: 640px; overflow-y: auto; }
+  .stock-item{
+    display:flex; justify-content: space-between; align-items:center;
+    padding: 12px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .stock-item:hover{ background: rgba(79,163,255,0.06); }
+  .stock-item.active{
+    background: rgba(79,163,255,0.10);
+    border-color: rgba(79,163,255,0.35);
+  }
+  .stock-item .sym{ font-family:'IBM Plex Mono', monospace; font-weight:600; font-size: 14px; }
+  .stock-item .co{ color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .stock-item .px{ font-family:'IBM Plex Mono', monospace; font-size: 13px; color: var(--muted); }
+
+  /* ---------- main panel ---------- */
+  .main{ padding: 26px clamp(18px, 3vw, 32px); }
+  .main-head{ display:flex; justify-content: space-between; align-items:flex-start; flex-wrap: wrap; gap: 14px; }
+  .main-head h2{ margin:0; font-family:'IBM Plex Mono', monospace; font-size: 22px; }
+  .main-head .co-line{ color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .badge{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.03em;
+    border: 1px solid transparent;
+  }
+  .badge.Bullish{ color: var(--bull); background: rgba(53,214,143,0.10); border-color: rgba(53,214,143,0.35); }
+  .badge.Bearish{ color: var(--bear); background: rgba(255,92,106,0.10); border-color: rgba(255,92,106,0.35); }
+  .badge.Neutral{ color: var(--neutral); background: rgba(242,181,68,0.10); border-color: rgba(242,181,68,0.35); }
+
+  /* ---------- verdict banner ---------- */
+  .verdict{
+    margin-top: 18px;
+    border-radius: 10px;
+    padding: 16px 18px;
+    display:flex; align-items:center; gap: 14px;
+    border: 1px solid var(--line);
+  }
+  .verdict.invest{ background: rgba(53,214,143,0.08); border-color: rgba(53,214,143,0.35); }
+  .verdict.watch, .verdict.caution, .verdict.wait{ background: rgba(242,181,68,0.08); border-color: rgba(242,181,68,0.35); }
+  .verdict.avoid{ background: rgba(255,92,106,0.08); border-color: rgba(255,92,106,0.35); }
+  .verdict .emoji{ font-size: 26px; line-height: 1; }
+  .verdict .label{ font-weight: 700; font-size: 15px; }
+  .verdict .note{ color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+
+  /* ---------- date range controls ---------- */
+  .range-bar{
+    display:flex; align-items:flex-end; gap: 14px; flex-wrap: wrap;
+    margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line);
+  }
+  .range-field{ display:flex; flex-direction: column; gap: 6px; }
+  .range-field label{
+    font-family:'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .range-field input[type="date"]{
+    background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+    padding: 8px 10px; color: var(--text); font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px; color-scheme: dark;
+  }
+  .range-field input[type="date"]:focus{ outline: none; border-color: var(--accent); }
+  .range-presets{ display:flex; gap: 6px; }
+  .range-presets button{
+    background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+    border-radius: 7px; padding: 8px 12px; font-size: 12px; cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .range-presets button:hover, .range-presets button.active{
+    border-color: var(--accent); color: var(--accent);
+  }
+
+  /* ---------- charts ---------- */
+  .chart-card{
+    margin-top: 16px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px 16px 10px;
+  }
+  .chart-card .chart-title{
+    font-family:'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+  }
+  .chart-card canvas{ max-height: 240px; }
+  .chart-card.volume canvas{ max-height: 110px; }
+
+  /* ---------- confidence gauge ---------- */
+  .gauge-label{
+    display:flex; justify-content: space-between;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11.5px; color: var(--muted); margin-top: 26px;
+  }
+  .gauge{
+    display:flex; height: 14px; border-radius: 7px; overflow:hidden;
+    border: 1px solid var(--line); margin-top: 8px;
+  }
+  .gauge div{ height: 100%; transition: width .5s ease; }
+  .seg-bear{ background: var(--bear); }
+  .seg-neutral{ background: var(--neutral); }
+  .seg-bull{ background: var(--bull); }
+
+  .metrics{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr));
+    gap: 12px; margin-top: 22px;
+  }
+  .metric{
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .metric .k{ color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .metric .v{ font-family:'IBM Plex Mono', monospace; font-size: 16px; margin-top: 4px; }
+
+  .explain{
+    margin-top: 24px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #d7dee8;
+  }
+  .explain .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size: 11px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+
+  /* ---------- assistant ---------- */
+  .assistant{ margin-top: 28px; }
+  .assistant .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px;
+  }
+  .chat-log{
+    display:flex; flex-direction: column; gap: 10px;
+    max-height: 260px; overflow-y: auto; margin-bottom: 12px;
+  }
+  .msg{ max-width: 78%; padding: 10px 13px; border-radius: 10px; font-size: 13.5px; line-height: 1.5; }
+  .msg.user{ align-self:flex-end; background: rgba(79,163,255,0.14); border: 1px solid rgba(79,163,255,0.3); }
+  .msg.bot{ align-self:flex-start; background: var(--panel); border: 1px solid var(--line); }
+  .chat-input{ display:flex; gap: 10px; }
+  .chat-input input{
+    flex:1; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 11px 14px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13.5px;
+  }
+  .chat-input input:focus{ outline: none; border-color: var(--accent); }
+  .chat-input button{
+    background: var(--accent); color: #06121f; border: none; border-radius: 8px;
+    padding: 0 18px; font-weight: 700; font-size: 13.5px; cursor: pointer;
+  }
+  .chat-input button:disabled{ opacity: 0.5; cursor: default; }
+
+  .hint{ color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .loading{ color: var(--muted); font-size: 13px; padding: 40px 0; text-align:center; }
+</style>
+</head>
+<body>
+
+  <div class="ticker-wrap">
+    <div class="ticker mono" id="ticker"></div>
+  </div>
+
+  <header>
+    <div class="brand">
+      <span class="mark">STOCK<span class="dot">·</span>SENSE</span>
+      <span class="tag">trend terminal</span>
+    </div>
+    <p class="sub">Historical price patterns run through a Random Forest classifier, translated into a plain-language investment insight — not a promise, a probability.</p>
+  </header>
+
+  <div class="layout">
+    <aside class="panel">
+      <div class="stock-list" id="stockList">
+        <div class="loading">Loading stocks…</div>
+      </div>
+    </aside>
+
+    <main class="panel main" id="mainPanel">
+      <div class="loading">Select a stock to see its trend prediction.</div>
+    </main>
+  </div>
+
+<script>
+const API = "";
+let stocks = [];
+let activeSymbol = null;
+let currentPrediction = null;
+let priceChart = null;
+let volumeChart = null;
+let availableRange = { start: null, end: null };
+
+async function loadStocks(){
+  const res = await fetch(`${API}/stocks`);
+  stocks = await res.json();
+  renderTicker();
+  renderStockList();
+  if (stocks.length) selectStock(stocks[0].symbol);
+}
+
+function renderTicker(){
+  const el = document.getElementById('ticker');
+  const items = stocks.concat(stocks).map(s => `
+    <span class="tick">
+      <span class="sym">${s.symbol}</span>
+      <span class="px">₹${Number(s.close).toLocaleString('en-IN')}</span>
+    </span>
+  `).join('');
+  el.innerHTML = items;
+}
+
+function renderStockList(){
+  const el = document.getElementById('stockList');
+  el.innerHTML = stocks.map(s => `
+    <div class="stock-item ${s.symbol === activeSymbol ? 'active' : ''}" onclick="selectStock('${s.symbol}')">
+      <div>
+        <div class="sym">${s.symbol}</div>
+        <div class="co">${s.company} · ${s.sector}</div>
+      </div>
+      <div class="px">₹${Number(s.close).toLocaleString('en-IN')}</div>
+    </div>
+  `).join('');
+}
+
+async function selectStock(symbol){
+  activeSymbol = symbol;
+  renderStockList();
+  document.getElementById('mainPanel').innerHTML = '<div class="loading">Running the model…</div>';
+
+  const res = await fetch(`${API}/insight/${symbol}`);
+  const data = await res.json();
+  currentPrediction = data.prediction;
+  renderMain(data);
+
+  // full-range history first, to learn the available date bounds
+  const hist = await fetch(`${API}/history/${symbol}`).then(r => r.json());
+  availableRange = { start: hist.available_start, end: hist.available_end };
+  setupRangeControls();
+  renderCharts(hist.points);
+}
+
+function renderMain(data){
+  const p = data.prediction;
+  const v = data.verdict;
+  const probs = p.class_probabilities;
+  const bear = (probs.Bearish || 0) * 100;
+  const neutral = (probs.Neutral || 0) * 100;
+  const bull = (probs.Bullish || 0) * 100;
+
+  const importances = Object.entries(p.feature_importances)
+    .sort((a,b) => b[1]-a[1]).slice(0,4);
+
+  const el = document.getElementById('mainPanel');
+  el.innerHTML = `
+    <div class="main-head">
+      <div>
+        <h2>${p.symbol} <span style="color:var(--muted); font-weight:400; font-size:15px;">· ${p.company}</span></h2>
+        <div class="co-line">${p.sector} · as of ${p.as_of_date} · ${p.horizon_days}-day outlook</div>
+      </div>
+      <span class="badge ${p.trend}">${p.trend} · ${(p.confidence*100).toFixed(0)}%</span>
+    </div>
+
+    <div class="verdict ${v.action}">
+      <div class="emoji">${v.emoji}</div>
+      <div>
+        <div class="label">${v.label}</div>
+        ${v.note ? `<div class="note">${v.note}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="gauge-label">
+      <span>BEARISH ${bear.toFixed(0)}%</span>
+      <span>NEUTRAL ${neutral.toFixed(0)}%</span>
+      <span>BULLISH ${bull.toFixed(0)}%</span>
+    </div>
+    <div class="gauge">
+      <div class="seg-bear" style="width:${bear}%"></div>
+      <div class="seg-neutral" style="width:${neutral}%"></div>
+      <div class="seg-bull" style="width:${bull}%"></div>
+    </div>
+
+    <div class="metrics">
+      ${importances.map(([k,v2]) => `
+        <div class="metric">
+          <div class="k">${k.replace('_',' ')}</div>
+          <div class="v">${(v2*100).toFixed(1)}% weight</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="explain">
+      <div class="eyebrow">Why this signal</div>
+      ${data.explanation}
+    </div>
+
+    <div class="explain" style="border-left-color: var(--bull);">
+      <div class="eyebrow" style="color:var(--bull);">Insight summary</div>
+      ${data.summary}
+    </div>
+
+    <div class="range-bar">
+      <div class="range-field">
+        <label>From</label>
+        <input type="date" id="rangeStart" onchange="applyRange()"/>
+      </div>
+      <div class="range-field">
+        <label>To</label>
+        <input type="date" id="rangeEnd" onchange="applyRange()"/>
+      </div>
+      <div class="range-presets" id="rangePresets">
+        <button onclick="setPreset(30)">1M</button>
+        <button onclick="setPreset(90)">3M</button>
+        <button onclick="setPreset(180)">6M</button>
+        <button onclick="setPreset('all')" class="active">All</button>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">Price · SMA5 · SMA10</div>
+      <canvas id="priceChart"></canvas>
+    </div>
+    <div class="chart-card volume">
+      <div class="chart-title">Trading Volume</div>
+      <canvas id="volumeChart"></canvas>
+    </div>
+
+    <div class="assistant">
+      <div class="eyebrow">Ask the assistant</div>
+      <div class="chat-log" id="chatLog"></div>
+      <div class="chat-input">
+        <input id="chatInput" type="text" placeholder="e.g. Should I invest in ${p.symbol} right now?" onkeydown="if(event.key==='Enter') sendChat()"/>
+        <button id="chatSend" onclick="sendChat()">Ask</button>
+      </div>
+      <div class="hint">Try: "What's the risk on ${p.symbol}?" or "Give me a 3-day trend check on ${p.symbol}"</div>
+    </div>
+  `;
+}
+
+function setupRangeControls(){
+  const startInput = document.getElementById('rangeStart');
+  const endInput = document.getElementById('rangeEnd');
+  if (!startInput || !endInput) return;
+  startInput.min = availableRange.start;
+  startInput.max = availableRange.end;
+  endInput.min = availableRange.start;
+  endInput.max = availableRange.end;
+  startInput.value = availableRange.start;
+  endInput.value = availableRange.end;
+}
+
+function setPreset(days){
+  const endInput = document.getElementById('rangeEnd');
+  const startInput = document.getElementById('rangeStart');
+  document.querySelectorAll('#rangePresets button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  if (days === 'all'){
+    startInput.value = availableRange.start;
+    endInput.value = availableRange.end;
+  } else {
+    const end = new Date(availableRange.end);
+    const start = new Date(end);
+    start.setDate(start.getDate() - days);
+    const minStart = new Date(availableRange.start);
+    startInput.value = (start < minStart ? minStart : start).toISOString().slice(0,10);
+    endInput.value = availableRange.end;
+  }
+  applyRange();
+}
+
+async function applyRange(){
+  const start = document.getElementById('rangeStart').value;
+  const end = document.getElementById('rangeEnd').value;
+  if (!start || !end || !activeSymbol) return;
+  const hist = await fetch(`${API}/history/${activeSymbol}?start=${start}&end=${end}`).then(r => r.json());
+  renderCharts(hist.points);
+}
+
+function prepareCanvas(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(rect.width || 400, 320);
+  const height = Math.max(rect.height || 220, 180);
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, width, height };
+}
+
+function drawLineChart(canvasId, labels, datasets, title) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const { ctx, width, height } = prepareCanvas(canvas);
+  const left = 46;
+  const right = 18;
+  const top = 18;
+  const bottom = 28;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+
+  const allValues = datasets.flatMap(ds => ds.values).filter(v => Number.isFinite(v));
+  const min = Math.min(...allValues);
+  const max = Math.max(...allValues);
+  const yPad = (max - min || 1) * 0.12;
+  const yMin = min - yPad;
+  const yMax = max + yPad;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = 'rgba(124, 135, 152, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#7c8798';
+  ctx.font = '11px Inter, sans-serif';
+
+  for (let i = 0; i <= 5; i++) {
+    const y = top + (plotHeight * i) / 5;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(width - right, y);
+    ctx.stroke();
+
+    const value = yMax - ((yMax - yMin) * i) / 5;
+    ctx.fillText(value.toFixed(0), 8, y + 4);
+  }
+
+  const xStep = labels.length > 1 ? plotWidth / (labels.length - 1) : plotWidth;
+  for (let i = 0; i < labels.length; i += Math.max(1, Math.ceil(labels.length / 8))) {
+    const x = left + (i * plotWidth) / Math.max(1, labels.length - 1);
+    ctx.fillText(labels[i].slice(5), x - 16, height - 8);
+  }
+
+  datasets.forEach((ds) => {
+    ctx.beginPath();
+    ds.values.forEach((value, index) => {
+      const x = left + (index * plotWidth) / Math.max(1, ds.values.length - 1);
+      const y = top + ((yMax - value) / (yMax - yMin || 1)) * plotHeight;
+      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = ds.color;
+    ctx.lineWidth = ds.width || 2;
+    ctx.setLineDash(ds.dash || []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    if (ds.fill) {
+      const lastX = left + (ds.values.length - 1) * plotWidth / Math.max(1, ds.values.length - 1);
+      const lastY = top + ((yMax - ds.values[ds.values.length - 1]) / (yMax - yMin || 1)) * plotHeight;
+      ctx.lineTo(lastX, height - bottom);
+      ctx.lineTo(left, height - bottom);
+      ctx.closePath();
+      ctx.fillStyle = ds.fill;
+      ctx.fill();
+    }
+  });
+
+  ctx.strokeStyle = 'rgba(124, 135, 152, 0.5)';
+  ctx.beginPath();
+  ctx.moveTo(left, top);
+  ctx.lineTo(left, height - bottom);
+  ctx.lineTo(width - right, height - bottom);
+  ctx.stroke();
+
+  if (title) {
+    ctx.fillStyle = '#7c8798';
+    ctx.font = '700 11px Inter, sans-serif';
+    ctx.fillText(title, left, 12);
+  }
+
+  const legendY = 12;
+  const legendX = width - 150;
+  const legendItems = [
+    { label: 'Close', color: '#4fa3ff' },
+    { label: 'SMA5', color: '#35d68f' },
+    { label: 'SMA10', color: '#f2b544' },
+  ];
+
+  legendItems.forEach((item, index) => {
+    const x = legendX + (index * 78);
+    ctx.fillStyle = item.color;
+    ctx.fillRect(x, legendY, 10, 2);
+    ctx.fillStyle = '#d7dee8';
+    ctx.font = '10px Inter, sans-serif';
+    ctx.fillText(item.label, x + 14, legendY + 4);
+  });
+}
+
+function drawBarChart(canvasId, labels, values) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const { ctx, width, height } = prepareCanvas(canvas);
+  const left = 30;
+  const right = 10;
+  const top = 18;
+  const bottom = 24;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+
+  const max = Math.max(...values, 1);
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = 'rgba(124, 135, 152, 0.2)';
+  ctx.fillStyle = '#7c8798';
+  ctx.font = '11px Inter, sans-serif';
+
+  for (let i = 0; i <= 4; i++) {
+    const y = top + (plotHeight * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(width - right, y);
+    ctx.stroke();
+  }
+
+  const barWidth = Math.max(2, plotWidth / Math.max(values.length, 1) * 0.7);
+  values.forEach((value, index) => {
+    const x = left + (index * plotWidth) / values.length + (plotWidth / values.length - barWidth) / 2;
+    const barHeight = (value / max) * plotHeight;
+    const y = height - bottom - barHeight;
+    ctx.fillStyle = 'rgba(79,163,255,0.55)';
+    ctx.fillRect(x, y, barWidth, barHeight);
+  });
+
+  ctx.strokeStyle = 'rgba(124, 135, 152, 0.5)';
+  ctx.beginPath();
+  ctx.moveTo(left, top);
+  ctx.lineTo(left, height - bottom);
+  ctx.lineTo(width - right, height - bottom);
+  ctx.stroke();
+
+  if (labels.length > 0) {
+    const step = Math.max(1, Math.ceil(labels.length / 8));
+    for (let i = 0; i < labels.length; i += step) {
+      const x = left + (i * plotWidth) / Math.max(1, labels.length - 1);
+      ctx.fillText(labels[i].slice(5), x - 11, height - 8);
+    }
+  }
+}
+
+function renderCharts(points){
+  if (!points || !points.length) return;
+
+  const labels = points.map(p => p.date);
+  const close = points.map(p => Number(p.close));
+  const sma5 = points.map(p => Number(p.sma5));
+  const sma10 = points.map(p => Number(p.sma10));
+  const volume = points.map(p => Number(p.volume));
+
+  drawLineChart('priceChart', labels, [
+    { values: close, color: '#4fa3ff', fill: 'rgba(79,163,255,0.08)', width: 2 },
+    { values: sma5, color: '#35d68f', width: 1.5, dash: [6, 4] },
+    { values: sma10, color: '#f2b544', width: 1.5, dash: [6, 4] },
+  ], 'Price · SMA5 · SMA10');
+
+  drawBarChart('volumeChart', labels, volume);
+}
+
+async function sendChat(){
+  const input = document.getElementById('chatInput');
+  const btn = document.getElementById('chatSend');
+  const log = document.getElementById('chatLog');
+  const message = input.value.trim();
+  if (!message) return;
+
+  log.innerHTML += `<div class="msg user">${escapeHtml(message)}</div>`;
+  input.value = '';
+  btn.disabled = true;
+  log.scrollTop = log.scrollHeight;
+
+  try{
+    const res = await fetch(`${API}/assistant/ask`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message})
+    });
+    const data = await res.json();
+    log.innerHTML += `<div class="msg bot">${data.verdict.emoji} ${escapeHtml(data.reply)}</div>`;
+  }catch(e){
+    log.innerHTML += `<div class="msg bot">Sorry, I couldn't reach the model just now.</div>`;
+  }
+  btn.disabled = false;
+  log.scrollTop = log.scrollHeight;
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.innerText = str;
+  return d.innerHTML;
+}
+
+loadStocks();
+</script>
+</body>
+</html>

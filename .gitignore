@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data/stock_data.csv
+data/processed_stock_data.csv
+model/trend_model.pkl
+model/metrics.json
+.venv/
